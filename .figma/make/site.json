@@ -1,0 +1,11 @@
+{
+  "title": "student-portal-v19",
+  "description": "A professional college platform enabling student registration, MCQ testing, scoring, and results with a clean, reliable, and user-friendly interface.",
+  "robots": {
+    "index": false
+  },
+  "accessibility": {
+    "addBypassLinks": false,
+    "ignoreReducedMotion": false
+  }
+}

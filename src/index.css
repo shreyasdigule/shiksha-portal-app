@@ -1,0 +1,78 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,300;0,400;0,500;1,400&display=swap');
+@import 'tailwindcss';
+
+@theme {
+  --color-bg-base: #0b0e17;
+  --color-bg-surface: #111520;
+  --color-bg-card: #161c2a;
+  --color-bg-elevated: #1c2438;
+  --color-border: #252e44;
+  --color-border-subtle: #1c2336;
+  --color-accent: #4361ee;
+  --color-accent-hover: #3451d1;
+  --color-accent-muted: #1e2d6b;
+  --color-text-primary: #e4e8f2;
+  --color-text-secondary: #8591a8;
+  --color-text-muted: #5b6882;
+  --color-success: #22c55e;
+  --color-success-bg: #0d2918;
+  --color-warning: #f59e0b;
+  --color-warning-bg: #2a1d06;
+  --color-danger: #ef4444;
+  --color-danger-bg: #2a0e0e;
+  --color-info: #38bdf8;
+  --font-sans: 'Inter', sans-serif;
+  --font-mono: 'DM Mono', monospace;
+}
+
+/* ── Light theme override ────────────────────────────────────────────────── */
+html[data-theme="light"] {
+  --color-bg-base: #f0f3fc;
+  --color-bg-surface: #ffffff;
+  --color-bg-card: #ffffff;
+  --color-bg-elevated: #e6ebf7;
+  --color-border: #c5cde6;
+  --color-border-subtle: #d8dfef;
+  --color-accent: #4361ee;
+  --color-accent-hover: #3451d1;
+  --color-accent-muted: #dde4ff;
+  --color-text-primary: #0d1225;
+  --color-text-secondary: #374166;
+  --color-text-muted: #6a7699;
+  --color-success: #16a34a;
+  --color-success-bg: #dcfce7;
+  --color-warning: #b45309;
+  --color-warning-bg: #fef3c7;
+  --color-danger: #dc2626;
+  --color-danger-bg: #fee2e2;
+  --color-info: #0284c7;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  font-family: var(--font-sans);
+  background-color: var(--color-bg-base);
+  color: var(--color-text-primary);
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-border) transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: var(--color-border);
+  border-radius: 2px;
+}
