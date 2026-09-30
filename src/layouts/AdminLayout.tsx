@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { AdminPage } from "../data/admin";
+import type { AdminPage } from "../data/adminPortalData";
 
 interface Props {
   currentPage: AdminPage;
@@ -42,7 +42,7 @@ export default function AdminLayout({ currentPage, onNavigate, onLogout, theme, 
               <div className="text-xs font-bold tracking-widest uppercase whitespace-nowrap" style={{ color: "var(--color-text-primary)", letterSpacing: "0.1em" }}>
                 ShikshaPortal
               </div>
-              <div className="text-[10px] font-medium" style={{ color: "#a78bfa" }}>Faculty / Admin</div>
+              <div className="text-[10px] font-medium" style={{ color: "#9a4f10" }}>Faculty / Admin</div>
             </div>
           )}
         </div>
@@ -64,9 +64,9 @@ export default function AdminLayout({ currentPage, onNavigate, onLogout, theme, 
                   className="w-full flex items-center gap-3 rounded px-2.5 py-2.5 text-sm transition-all text-left"
                   title={collapsed ? item.label : undefined}
                   style={{
-                    background: active ? "#1e1040" : "transparent",
-                    color: active ? "#a78bfa" : "var(--color-text-secondary)",
-                    borderLeft: active ? "2px solid #7c3aed" : "2px solid transparent",
+                    background: active ? "#fff1e6" : "transparent",
+                    color: active ? "#9a4f10" : "var(--color-text-secondary)",
+                    borderLeft: active ? "2px solid #d97724" : "2px solid transparent",
                   }}
                 >
                   <span className="shrink-0">{item.icon}</span>
@@ -86,9 +86,9 @@ export default function AdminLayout({ currentPage, onNavigate, onLogout, theme, 
                   onClick={() => onNavigate("settings")}
                   className="w-full flex items-center gap-3 rounded px-2.5 py-2.5 text-sm text-left transition-all"
                   style={{
-                    background: currentPage === "settings" ? "#1e1040" : "transparent",
-                    color: currentPage === "settings" ? "#a78bfa" : "var(--color-text-muted)",
-                    borderLeft: currentPage === "settings" ? "2px solid #7c3aed" : "2px solid transparent",
+                    background: currentPage === "settings" ? "#fff1e6" : "transparent",
+                    color: currentPage === "settings" ? "#9a4f10" : "var(--color-text-muted)",
+                    borderLeft: currentPage === "settings" ? "2px solid #d97724" : "2px solid transparent",
                   }}
                 >
                   <span className="shrink-0"><SettingsIcon /></span>
@@ -187,13 +187,13 @@ function AdminIdentity({ collapsed }: { collapsed: boolean }) {
   const initials = name.split(" ").map((w: string) => w[0]).join("").slice(0, 2).toUpperCase();
   return (
     <div className="px-3 py-3 flex items-center gap-2.5">
-      <div className="w-7 h-7 rounded-full shrink-0 flex items-center justify-center text-xs font-bold" style={{ background: "#1e1040", color: "#a78bfa" }}>
+      <div className="w-7 h-7 rounded-full shrink-0 flex items-center justify-center text-xs font-bold" style={{ background: "#fff1e6", color: "#9a4f10" }}>
         {initials}
       </div>
       {!collapsed && (
         <div className="flex-1 min-w-0">
           <div className="text-xs font-semibold truncate" style={{ color: "var(--color-text-primary)" }}>{name}</div>
-          <div className="text-[10px] truncate" style={{ color: "#a78bfa", fontFamily: "var(--font-mono)" }}>{email}</div>
+          <div className="text-[10px] truncate" style={{ color: "#9a4f10", fontFamily: "var(--font-mono)" }}>{email}</div>
         </div>
       )}
     </div>

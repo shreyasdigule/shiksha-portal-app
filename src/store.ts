@@ -1,7 +1,8 @@
-// Application data store backed by localStorage.
-// This acts as the data layer in lieu of a backend API.
+// Browser-local demo store for exam attempts and attendance fallback data.
+// Account authentication and faculty rosters use Supabase instead.
 
 export interface StoredStudent {
+  authUserId?: string;
   studentId: string;
   name: string;
   displayName: string;

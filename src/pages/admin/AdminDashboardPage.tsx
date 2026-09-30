@@ -1,14 +1,22 @@
-import { ADMIN_COURSES, ADMIN_TESTS } from "../../data/admin";
-import type { AdminPage } from "../../data/admin";
+import { useEffect, useState } from "react";
+import { ADMIN_COURSES, ADMIN_TESTS } from "../../data/adminPortalData";
+import type { AdminPage } from "../../data/adminPortalData";
 import { getStudents, getAttempts } from "../../store";
+import { isSupabaseConfigured, supabase } from "../../lib/supabase";
 
 interface Props {
   onNavigate: (page: AdminPage) => void;
 }
 
 export default function AdminDashboardPage({ onNavigate }: Props) {
-  const students = getStudents();
+  const [registeredCount, setRegisteredCount] = useState(() => getStudents().length);
   const attempts = getAttempts();
+
+  useEffect(() => {
+    if (!isSupabaseConfigured || !supabase) return;
+    void supabase.from("profiles").select("id", { count: "exact", head: true }).eq("role", "student")
+      .then(({ count, error }) => { if (!error && count !== null) setRegisteredCount(count); });
+  }, []);
 
   const activeCourses = ADMIN_COURSES.filter((c) => c.status === "active").length;
   const activeTests = ADMIN_TESTS.filter((t) => t.status === "active" || t.status === "upcoming").length;
@@ -37,7 +45,7 @@ export default function AdminDashboardPage({ onNavigate }: Props) {
       {/* Stat cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         {[
-          { label: "Registered Students", value: students.length, sub: students.length === 0 ? "No registrations yet" : `${students.length} total`, color: "var(--color-accent)", page: "students" as AdminPage, icon: <UsersIcon /> },
+          { label: "Registered Students", value: registeredCount, sub: registeredCount === 0 ? "No registrations yet" : `${registeredCount} total`, color: "var(--color-accent)", page: "students" as AdminPage, icon: <UsersIcon /> },
           { label: "Active Courses", value: activeCourses, sub: `${ADMIN_COURSES.length} total this semester`, color: "var(--color-success)", page: "courses" as AdminPage, icon: <BookIcon /> },
           { label: "Scheduled Tests", value: activeTests, sub: `${ADMIN_TESTS.filter((t) => t.status === "completed").length} completed`, color: "#a78bfa", page: "tests" as AdminPage, icon: <ClipboardIcon /> },
           { label: "Avg. Score", value: attempts.length ? `${avgScore}%` : "N/A", sub: attempts.length ? `Across ${attempts.length} submissions` : "No submissions yet", color: "var(--color-warning)", page: "results" as AdminPage, icon: <ChartIcon /> },

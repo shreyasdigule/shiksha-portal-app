@@ -1,15 +1,21 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { getStudents, getAttendance, mergeAttendanceRecords } from "../../store";
-import type { AttendanceRecord } from "../../store";
-import { ADMIN_COURSES } from "../../data/admin";
+import type { AttendanceRecord, StoredStudent } from "../../store";
+import { ADMIN_COURSES } from "../../data/adminPortalData";
+import { isSupabaseConfigured, supabase } from "../../lib/supabase";
 
 type ViewMode = "mark" | "history";
+type CourseChoice = { id: string; code: string; title: string };
 
 export default function AdminAttendancePage() {
   const [viewMode, setViewMode] = useState<ViewMode>("mark");
   const [selectedCourse, setSelectedCourse] = useState<string>("");
   const [date, setDate] = useState<string>(new Date().toISOString().slice(0, 10));
   const [markings, setMarkings] = useState<Record<string, "present" | "absent">>({});
+  const [students, setStudents] = useState<StoredStudent[]>(() => getStudents());
+  const [activeCourses, setActiveCourses] = useState<CourseChoice[]>(() => ADMIN_COURSES.filter((c) => c.status === "active").map((c) => ({ id: String(c.id), code: c.code, title: c.title })));
+  const [remoteRecords, setRemoteRecords] = useState<AttendanceRecord[]>([]);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
 
@@ -17,33 +23,100 @@ export default function AdminAttendancePage() {
   const [histCourse, setHistCourse] = useState("All");
   const [histDate, setHistDate] = useState("");
 
-  const students = getStudents();
-  const activeCourses = ADMIN_COURSES.filter((c) => c.status === "active");
+  useEffect(() => {
+    if (!isSupabaseConfigured || !supabase) return;
+    let active = true;
+    void (async () => {
+      const [profilesResult, subjectsResult] = await Promise.all([
+        supabase.from("profiles").select("id,student_id,email,full_name,department,semester,created_at").eq("role", "student").order("full_name"),
+        supabase.from("subjects").select("id,code,name").eq("is_active", true).eq("department", "Computer Engineering").order("semester").order("code"),
+      ]);
+      if (!active) return;
+      if (profilesResult.error) setLoadError(profilesResult.error.message);
+      else setStudents((profilesResult.data ?? []).map((row) => ({
+        authUserId: row.id,
+        studentId: row.student_id ?? "Not provided",
+        name: row.full_name,
+        displayName: row.full_name,
+        email: row.email,
+        department: row.department ?? "Not set",
+        semester: row.semester ?? 0,
+        registeredAt: row.created_at,
+      })));
+      if (subjectsResult.error) setLoadError((current) => current ?? subjectsResult.error.message);
+      else setActiveCourses((subjectsResult.data ?? []).map((row) => ({ id: row.id, code: row.code, title: row.name })));
+    })();
+    return () => { active = false; };
+  }, []);
+
+  useEffect(() => {
+    if (!isSupabaseConfigured || !supabase || activeCourses.length === 0) return;
+    let active = true;
+    void supabase.from("attendance").select("id,subject_id,student_id,class_date,status")
+      .then(({ data, error }) => {
+        if (!active) return;
+        if (error) { setLoadError((current) => current ?? error.message); return; }
+        const records = (data ?? []).map((row) => {
+          const course = activeCourses.find((item) => item.id === row.subject_id);
+          const student = students.find((item) => item.authUserId === row.student_id);
+          return {
+            id: row.id,
+            date: row.class_date,
+            courseCode: course?.code ?? row.subject_id,
+            courseTitle: course?.title ?? row.subject_id,
+            studentId: student?.studentId ?? row.student_id,
+            status: row.status as "present" | "absent",
+            markedAt: "",
+          };
+        });
+        setRemoteRecords(records);
+      });
+    return () => { active = false; };
+  }, [students, activeCourses]);
+
+  const courseChoice = activeCourses.find((course) => course.code === selectedCourse);
+  const studentKey = (student: StoredStudent) => student.authUserId ?? student.studentId;
 
   const showToast = (msg: string) => {
     setToast(msg);
     setTimeout(() => setToast(null), 3000);
   };
 
-  const handleToggle = (studentId: string) => {
-    setSaved(false);
-    setMarkings((prev) => ({
-      ...prev,
-      [studentId]: prev[studentId] === "present" ? "absent" : "present",
-    }));
-  };
-
   const handleMarkAll = (status: "present" | "absent") => {
     setSaved(false);
     const newMarkings: Record<string, "present" | "absent"> = {};
-    for (const s of students) { newMarkings[s.studentId] = status; }
+    for (const s of students) { newMarkings[studentKey(s)] = status; }
     setMarkings(newMarkings);
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!selectedCourse || !date) { showToast("Please select a course and date."); return; }
-    const course = ADMIN_COURSES.find((c) => c.code === selectedCourse);
+    const course = activeCourses.find((c) => c.code === selectedCourse);
     if (!course) return;
+
+    if (isSupabaseConfigured && supabase) {
+      const { data: authData, error: authError } = await supabase.auth.getUser();
+      if (authError || !authData.user) { showToast("Your session expired. Sign in again to save attendance."); return; }
+      const rows = students.filter((student) => student.authUserId).map((student) => ({
+        subject_id: course.id,
+        student_id: student.authUserId!,
+        class_date: date,
+        status: markings[studentKey(student)] ?? "absent",
+        marked_by: authData.user.id,
+      }));
+      if (rows.length !== students.length) { showToast("Some student profiles are missing Supabase IDs. Refresh and try again."); return; }
+      const { error } = await supabase.from("attendance").upsert(rows, { onConflict: "subject_id,student_id,class_date" });
+      if (error) { showToast(`Attendance could not be saved: ${error.message}`); return; }
+      const savedRecords: AttendanceRecord[] = students.map((student) => ({
+        id: `${date}-${selectedCourse}-${student.studentId}`, date, courseCode: selectedCourse,
+        courseTitle: course.title, studentId: student.studentId,
+        status: markings[studentKey(student)] ?? "absent", markedAt: new Date().toISOString(),
+      }));
+      setRemoteRecords((previous) => [...previous.filter((record) => !(record.date === date && record.courseCode === selectedCourse)), ...savedRecords]);
+      setSaved(true);
+      showToast(`Attendance saved to Supabase for ${course.title} on ${formatDateLabel(date)}.`);
+      return;
+    }
 
     const records: AttendanceRecord[] = students.map((s) => ({
       id: `${date}-${selectedCourse}-${s.studentId}`,
@@ -51,7 +124,7 @@ export default function AdminAttendancePage() {
       courseCode: selectedCourse,
       courseTitle: course.title,
       studentId: s.studentId,
-      status: markings[s.studentId] ?? "absent",
+      status: markings[studentKey(s)] ?? "absent",
       markedAt: new Date().toISOString(),
     }));
 
@@ -61,8 +134,19 @@ export default function AdminAttendancePage() {
   };
 
   // Load existing records for the selected course + date into markings
-  const handleLoadExisting = () => {
+  const handleLoadExisting = async () => {
     if (!selectedCourse || !date) return;
+    if (isSupabaseConfigured && supabase && courseChoice) {
+      const { data, error } = await supabase.from("attendance").select("student_id,status")
+        .eq("subject_id", courseChoice.id).eq("class_date", date);
+      if (error) { showToast(`Could not load saved attendance: ${error.message}`); return; }
+      const savedMarkings: Record<string, "present" | "absent"> = {};
+      for (const row of data ?? []) savedMarkings[row.student_id] = row.status as "present" | "absent";
+      setMarkings(savedMarkings);
+      setSaved(false);
+      showToast(data?.length ? "Saved attendance loaded." : "No attendance is saved for this course and date.");
+      return;
+    }
     const existing = getAttendance().filter((r) => r.courseCode === selectedCourse && r.date === date);
     if (existing.length === 0) return;
     const m: Record<string, "present" | "absent"> = {};
@@ -72,7 +156,7 @@ export default function AdminAttendancePage() {
   };
 
   // History data
-  const allRecords = getAttendance();
+  const allRecords = isSupabaseConfigured ? remoteRecords : getAttendance();
   const histFiltered = allRecords.filter((r) => {
     const matchCourse = histCourse === "All" || r.courseCode === histCourse;
     const matchDate = histDate === "" || r.date === histDate;
@@ -100,6 +184,7 @@ export default function AdminAttendancePage() {
         <h1 className="text-xl font-semibold mb-1" style={{ color: "var(--color-text-primary)" }}>Attendance</h1>
         <p className="text-sm" style={{ color: "var(--color-text-muted)" }}>Mark attendance for your courses and view historical records.</p>
       </div>
+      {loadError && <div role="alert" className="mb-4 rounded px-4 py-3 text-sm" style={{ background: "var(--color-danger-bg)", color: "var(--color-danger)" }}>Could not load attendance data from Supabase: {loadError}</div>}
 
       {/* Mode tabs */}
       <div className="flex gap-1 mb-6 p-1 rounded w-fit" style={{ background: "var(--color-bg-card)", border: "1px solid var(--color-border)" }}>
@@ -187,14 +272,15 @@ export default function AdminAttendancePage() {
                 <table className="w-full text-sm">
                   <thead>
                     <tr style={{ borderBottom: "1px solid var(--color-border)" }}>
-                      {["Student", "Student ID", "Department", "Attendance"].map((h) => (
+                      {["Student", "PRN", "Department", "Class / Semester", "Attendance"].map((h) => (
                         <th key={h} className="text-left px-4 py-3 text-[10px] font-semibold uppercase tracking-wider" style={{ color: "var(--color-text-muted)" }}>{h}</th>
                       ))}
                     </tr>
                   </thead>
                   <tbody>
                     {students.map((s, i) => {
-                      const status = markings[s.studentId];
+                      const key = studentKey(s);
+                      const status = markings[key];
                       const isPresent = status === "present";
                       const isAbsent = status === "absent";
                       return (
@@ -209,10 +295,11 @@ export default function AdminAttendancePage() {
                           </td>
                           <td className="px-4 py-3 text-xs" style={{ fontFamily: "var(--font-mono)", color: "var(--color-text-muted)" }}>{s.studentId}</td>
                           <td className="px-4 py-3 text-xs" style={{ color: "var(--color-text-muted)" }}>{s.department}</td>
+                          <td className="px-4 py-3 text-xs" style={{ color: "var(--color-text-muted)" }}>{s.semester ? `Semester ${s.semester}` : "—"}</td>
                           <td className="px-4 py-3">
                             <div className="flex items-center gap-2">
                               <button
-                                onClick={() => { setMarkings((prev) => ({ ...prev, [s.studentId]: "present" })); setSaved(false); }}
+                                onClick={() => { setMarkings((prev) => ({ ...prev, [key]: "present" })); setSaved(false); }}
                                 className="flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded transition-all"
                                 style={{
                                   background: isPresent ? "var(--color-success-bg)" : "transparent",
@@ -224,7 +311,7 @@ export default function AdminAttendancePage() {
                                 Present
                               </button>
                               <button
-                                onClick={() => { setMarkings((prev) => ({ ...prev, [s.studentId]: "absent" })); setSaved(false); }}
+                                onClick={() => { setMarkings((prev) => ({ ...prev, [key]: "absent" })); setSaved(false); }}
                                 className="flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded transition-all"
                                 style={{
                                   background: isAbsent ? "var(--color-danger-bg)" : "transparent",
@@ -312,7 +399,7 @@ export default function AdminAttendancePage() {
               {sortedGroupKeys.map((key) => {
                 const groupRecords = histGroups[key];
                 const [groupDate, groupCourse] = key.split("__");
-                const courseInfo = ADMIN_COURSES.find((c) => c.code === groupCourse);
+                const courseInfo = activeCourses.find((c) => c.code === groupCourse);
                 const presentCount = groupRecords.filter((r) => r.status === "present").length;
                 const pct = Math.round((presentCount / groupRecords.length) * 100);
                 const pctColor = pct >= 75 ? "var(--color-success)" : pct >= 60 ? "var(--color-warning)" : "var(--color-danger)";
@@ -333,7 +420,7 @@ export default function AdminAttendancePage() {
 
                     <div className="px-5 py-3 flex flex-wrap gap-2">
                       {groupRecords.sort((a, b) => a.studentId.localeCompare(b.studentId)).map((r) => {
-                        const stu = getStudents().find((s) => s.studentId === r.studentId);
+                        const stu = students.find((s) => s.studentId === r.studentId);
                         const name = stu ? stu.displayName : r.studentId;
                         const isPresent = r.status === "present";
                         return (

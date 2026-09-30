@@ -1,6 +1,6 @@
 import type { Page, User } from "../App";
 import { getMyAttempts, calcGrade } from "../store";
-import { ADMIN_TESTS, ADMIN_COURSES } from "../data/admin";
+import { ADMIN_TESTS, ADMIN_COURSES } from "../data/adminPortalData";
 
 interface Props {
   user: User;

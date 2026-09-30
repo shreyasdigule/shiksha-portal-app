@@ -1,6 +1,5 @@
 import { useState, useEffect } from "react";
 import LoginPage from "./pages/LoginPage";
-import type { LoginInfo } from "./pages/LoginPage";
 import DashboardLayout from "./layouts/DashboardLayout";
 import AdminLayout from "./layouts/AdminLayout";
 import DashboardPage from "./pages/DashboardPage";
@@ -20,9 +19,10 @@ import AdminTestsPage from "./pages/admin/AdminTestsPage";
 import AdminResultsPage from "./pages/admin/AdminResultsPage";
 import AdminAttendancePage from "./pages/admin/AdminAttendancePage";
 import AdminSettingsPage from "./pages/admin/AdminSettingsPage";
-import type { AdminPage } from "./data/admin";
-import { upsertStudent } from "./store";
-import { api, clearToken } from "./api";
+import type { AdminPage } from "./data/adminPortalData";
+import { getProfile, isSupabaseConfigured, supabase } from "./lib/supabase";
+import type { Profile } from "./lib/supabase";
+import type { AuthMode, FacultyRegistration, StudentRegistration } from "./pages/LoginPage";
 
 export type Page = "dashboard" | "courses" | "tests" | "results" | "attendance" | "profile";
 
@@ -35,18 +35,11 @@ export interface User {
   avatar: string;
 }
 
-const DEFAULT_USER: User = {
-  name: "Student",
-  email: "student@vit.edu",
-  studentId: "VIT-0000000000",
-  department: "Computer Science & Engineering",
-  semester: 6,
-  avatar: "ST",
-};
-
 export default function App() {
   const [authRole, setAuthRole] = useState<"student" | "admin" | null>(null);
-  const [user, setUser] = useState<User>(DEFAULT_USER);
+  const [user, setUser] = useState<User | null>(null);
+  const [authLoading, setAuthLoading] = useState(true);
+  const [authIssue, setAuthIssue] = useState("");
   const [currentPage, setCurrentPage] = useState<Page>("dashboard");
   const [adminPage, setAdminPage] = useState<AdminPage>("overview");
   const [testDetailId, setTestDetailId] = useState<number | null>(null);
@@ -68,53 +61,95 @@ export default function App() {
   const toggleTheme = () => setTheme((t) => (t === "dark" ? "light" : "dark"));
 
   // ── Auth ──────────────────────────────────────────────────────────────────
-  const handleLogin = async (role: "student" | "admin", info?: LoginInfo) => {
-    if (role === "student" && info) {
-      const u: User = {
-        name: info.displayName,
-        email: info.email,
-        studentId: info.studentId,
-        department: "Computer Science & Engineering",
-        semester: 6,
-        avatar: info.displayName.slice(0, 2).toUpperCase(),
-      };
-      setUser(u);
-      // Try real backend registration/login; fall back to localStorage store
-      try {
-        await api.auth.register({
-          name: info.name,
-          email: info.email,
-          password: info.studentId, // use studentId as default password
-          role: "student",
-          studentId: info.studentId,
-          department: u.department,
-          semester: u.semester,
-        });
-      } catch {
-        // Already registered or backend unavailable — try login
-        try {
-          await api.auth.login(info.email, info.studentId);
-        } catch {
-          // Backend unavailable — continue with localStorage only
-        }
+  const authClient = supabase;
+  const applyProfile = (profile: Profile) => {
+    if (profile.status !== "active") throw new Error("Your account is pending approval or suspended. Contact the registrar.");
+    const displayName = profile.full_name.trim() || profile.email.split("@")[0];
+    const u: User = {
+      name: displayName,
+      email: profile.email,
+      studentId: profile.student_id || profile.id,
+      department: profile.department || "Not set",
+      semester: profile.semester || 1,
+      avatar: displayName.slice(0, 2).toUpperCase(),
+    };
+    setUser(u);
+    setAuthRole(profile.role === "student" ? "student" : "admin");
+    setAuthIssue("");
+  };
+
+  useEffect(() => {
+    if (!authClient) { setAuthLoading(false); return; }
+    let mounted = true;
+    const restoreSession = async () => {
+      const { data, error } = await authClient.auth.getSession();
+      if (error) throw error;
+      if (data.session) applyProfile(await getProfile(data.session.user.id));
+    };
+    restoreSession().catch((error) => {
+      if (mounted) { setAuthIssue(error instanceof Error ? error.message : "Could not restore your session."); setUser(null); setAuthRole(null); void authClient.auth.signOut(); }
+    }).finally(() => { if (mounted) setAuthLoading(false); });
+    const { data: listener } = authClient.auth.onAuthStateChange((_event, session) => {
+      if (!mounted) return;
+      if (!session) { setUser(null); setAuthRole(null); return; }
+      // Supabase callback runs outside React; defer profile fetch to avoid blocking auth.
+      window.setTimeout(() => {
+        getProfile(session.user.id).then((profile) => { if (mounted) applyProfile(profile); })
+          .catch((error) => { if (mounted) { setAuthIssue(error instanceof Error ? error.message : "Profile could not be loaded."); setUser(null); setAuthRole(null); void authClient.auth.signOut(); } });
+      }, 0);
+    });
+    return () => { mounted = false; listener.subscription.unsubscribe(); };
+  }, []);
+
+  const handleLogin = async (requestedRole: "student" | "admin", email: string, password: string, mode: AuthMode, registration?: StudentRegistration | FacultyRegistration) => {
+    if (!supabase || !isSupabaseConfigured) throw new Error("Supabase is not configured.");
+    if (mode === "sign_up") {
+      if (!registration) throw new Error("Registration details are required.");
+      let userMetadata: { full_name: string; department: string; student_id?: string; semester?: number; requested_role?: string };
+      if (requestedRole === "student") {
+        if (!("studentId" in registration)) throw new Error("Student registration details are incomplete.");
+        userMetadata = { full_name: registration.fullName, student_id: registration.studentId, department: registration.department, semester: registration.semester };
+      } else {
+        if ("studentId" in registration) throw new Error("Faculty registration details are invalid.");
+        userMetadata = { full_name: registration.fullName, department: registration.department, requested_role: "faculty" };
       }
-      upsertStudent({
-        studentId: info.studentId,
-        name: info.name,
-        displayName: info.displayName,
-        email: info.email,
-        registeredAt: new Date().toISOString(),
-        department: u.department,
-        semester: u.semester,
+      const { data, error } = await supabase.auth.signUp({
+        email, password,
+        options: { data: userMetadata },
       });
+      if (error) throw error;
+      if (!data.user) throw new Error("Supabase did not create the account. Please try again.");
+      if (requestedRole === "admin") {
+        // Faculty self-registration creates an active faculty profile and its
+        // separately labelled faculty_accounts row through database triggers.
+        if (data.session) applyProfile(await getProfile(data.user.id));
+        return;
+      }
+      if (!data.session) {
+        throw new Error("Supabase created the account but is still requiring email confirmation. Turn off Confirm email under Authentication → Sign In / Providers → Email, then remove this unconfirmed test account and register again.");
+      }
+      applyProfile(await getProfile(data.user.id));
+      return;
     }
-    setAuthRole(role);
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) throw error;
+    if (!data.user) throw new Error("Supabase did not return an authenticated account.");
+    const profile = await getProfile(data.user.id);
+    if (profile.role === "student" && requestedRole !== "student") {
+      await supabase.auth.signOut();
+      throw new Error("This account is registered as a student. Choose Student sign in.");
+    }
+    if (profile.role !== "student" && requestedRole !== "admin") {
+      await supabase.auth.signOut();
+      throw new Error("This account is registered for faculty/admin. Choose Faculty / Admin sign in.");
+    }
+    applyProfile(profile);
   };
 
   const handleLogout = () => {
-    clearToken();
+    void supabase?.auth.signOut();
     setAuthRole(null);
-    setUser(DEFAULT_USER);
+    setUser(null);
     setCurrentPage("dashboard");
     setAdminPage("overview");
     setTestDetailId(null);
@@ -173,8 +208,14 @@ export default function App() {
   };
 
   // ── Auth gate ─────────────────────────────────────────────────────────────
-  if (!authRole) {
-    return <LoginPage onLogin={handleLogin} theme={theme} onToggleTheme={toggleTheme} />;
+  if (authLoading) {
+    return <div className="min-h-screen flex items-center justify-center" style={{ background: "var(--color-bg-base)", color: "var(--color-text-secondary)" }}>Restoring secure session…</div>;
+  }
+  if (!authRole || !user) {
+    return <>
+      <LoginPage onLogin={handleLogin} theme={theme} onToggleTheme={toggleTheme} />
+      {authIssue && <div role="alert" className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 rounded px-4 py-3 text-sm shadow-lg" style={{ background: "var(--color-danger)", color: "white" }}>{authIssue}</div>}
+    </>;
   }
 
   // ── Admin flow ────────────────────────────────────────────────────────────

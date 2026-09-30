@@ -1,8 +1,7 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { getStudents } from "../../store";
 import type { StoredStudent } from "../../store";
-
-const DEPT_OPTIONS = ["All", "CSE", "ECE", "IT", "ME"];
+import { isSupabaseConfigured, supabase } from "../../lib/supabase";
 
 export default function AdminStudentsPage() {
   const [search, setSearch] = useState("");
@@ -12,7 +11,32 @@ export default function AdminStudentsPage() {
   const [confirmSuspend, setConfirmSuspend] = useState<StoredStudent | null>(null);
   const [toast, setToast] = useState<string | null>(null);
 
-  const allStudents = getStudents();
+  const [allStudents, setAllStudents] = useState<StoredStudent[]>(() => getStudents());
+  const [loading, setLoading] = useState(isSupabaseConfigured);
+  const [loadError, setLoadError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!isSupabaseConfigured || !supabase) return;
+    let active = true;
+    supabase.from("profiles").select("id,student_id,email,full_name,department,semester,created_at")
+      .eq("role", "student").order("created_at", { ascending: false })
+      .then(({ data, error }) => {
+        if (!active) return;
+        if (error) setLoadError(error.message);
+        else setAllStudents((data ?? []).map((row) => ({
+          authUserId: row.id,
+          studentId: row.student_id ?? "Not provided",
+          name: row.full_name,
+          displayName: row.full_name,
+          email: row.email,
+          department: row.department ?? "Not set",
+          semester: row.semester ?? 0,
+          registeredAt: row.created_at,
+        })));
+        setLoading(false);
+      });
+    return () => { active = false; };
+  }, []);
 
   const showToast = (msg: string) => {
     setToast(msg);
@@ -25,6 +49,7 @@ export default function AdminStudentsPage() {
     const matchDept = deptFilter === "All" || s.department === deptFilter;
     return matchSearch && matchDept;
   });
+  const departmentOptions = ["All", ...Array.from(new Set(allStudents.map((student) => student.department).filter(Boolean))).sort()];
 
   const handleToggleSuspend = (student: StoredStudent) => {
     setSuspendedIds((prev) => {
@@ -59,6 +84,9 @@ export default function AdminStudentsPage() {
         </div>
       </div>
 
+      {loadError && <div role="alert" className="mb-4 rounded px-4 py-3 text-sm" style={{ background: "var(--color-danger-bg)", color: "var(--color-danger)" }}>Could not load registered students from Supabase: {loadError}</div>}
+      {loading && <div className="mb-4 text-sm" style={{ color: "var(--color-text-muted)" }}>Loading student accounts from Supabase…</div>}
+
       {allStudents.length === 0 ? (
         <div className="rounded-lg p-16 text-center" style={{ background: "var(--color-bg-card)", border: "1px solid var(--color-border)" }}>
           <div className="w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-4" style={{ background: "var(--color-bg-elevated)" }}>
@@ -84,7 +112,7 @@ export default function AdminStudentsPage() {
                 onBlur={(e) => (e.target.style.borderColor = "var(--color-border)")}
               />
             </div>
-            <FilterChips options={DEPT_OPTIONS} value={deptFilter} onChange={setDeptFilter} />
+            <FilterChips options={departmentOptions} value={deptFilter} onChange={setDeptFilter} />
           </div>
 
           <div className="flex gap-5">
@@ -96,7 +124,7 @@ export default function AdminStudentsPage() {
                 <table className="w-full text-sm">
                   <thead>
                     <tr style={{ borderBottom: "1px solid var(--color-border)" }}>
-                      {["Student", "Department", "Semester", "Registered", "Status", ""].map((h) => (
+                      {["Student / PRN", "Department", "Class / Semester", "Registered", "Status", ""].map((h) => (
                         <th key={h} className="text-left px-4 py-3 text-[10px] font-semibold uppercase tracking-wider" style={{ color: "var(--color-text-muted)" }}>{h}</th>
                       ))}
                     </tr>

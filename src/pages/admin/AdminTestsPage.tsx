@@ -1,6 +1,7 @@
 import { useState } from "react";
-import { ADMIN_TESTS } from "../../data/admin";
-import type { AdminTest } from "../../data/admin";
+import type { FormEvent } from "react";
+import { ADMIN_COURSES, ADMIN_TESTS } from "../../data/adminPortalData";
+import type { AdminTest } from "../../data/adminPortalData";
 
 type StatusFilter = "All" | "active" | "upcoming" | "completed" | "draft";
 type TypeFilter = "All" | "Mid-Semester" | "Unit Test" | "Quiz";
@@ -19,6 +20,37 @@ export default function AdminTestsPage() {
   const [toast, setToast] = useState<string | null>(null);
 
   const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(null), 3000); };
+
+  const handleCreateTest = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const values = new FormData(event.currentTarget);
+    const code = String(values.get("code")).trim().toUpperCase();
+    const title = String(values.get("title")).trim();
+    const courseCode = String(values.get("courseCode"));
+    const date = String(values.get("date"));
+    const time = String(values.get("time"));
+    const durationMinutes = Number(values.get("duration"));
+    const questions = Number(values.get("questions"));
+    const type = String(values.get("type"));
+    if (!ADMIN_COURSES.some((course) => course.code === courseCode)) return;
+    if (!/^[A-Z0-9][A-Z0-9_-]{2,23}$/.test(code)) return;
+    if (tests.some((test) => test.code.toUpperCase() === code)) { showToast("A test with this code already exists."); return; }
+    if (title.length < 3 || !date || !time || durationMinutes < 1 || durationMinutes > 300 || questions < 1 || questions > 200) {
+      showToast("Check the title, date, time, duration, and question count.");
+      return;
+    }
+    const course = ADMIN_COURSES.find((item) => item.code === courseCode)!;
+    const newTest: AdminTest = {
+      id: Date.now(), code, title, courseCode, type,
+      date: new Date(`${date}T00:00:00`).toLocaleDateString([], { month: "short", day: "numeric", year: "numeric" }),
+      time: new Date(`1970-01-01T${time}`).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+      duration: `${durationMinutes} min`, questions, totalMarks: questions * 2,
+      registered: 0, attempted: 0, status: "draft",
+    };
+    setTests((prev) => [newTest, ...prev]);
+    setShowCreate(false);
+    showToast(`"${title}" was saved as a draft for ${course.code}.`);
+  };
 
   const filtered = tests.filter((t) => {
     const q = search.toLowerCase();
@@ -214,34 +246,33 @@ export default function AdminTestsPage() {
       {/* Create test modal */}
       {showCreate && (
         <Modal onClose={() => setShowCreate(false)}>
-          <div className="p-6 max-w-[480px] w-[480px]">
+          <form onSubmit={handleCreateTest} className="p-6 max-w-[480px] w-[min(480px,calc(100vw-2rem))]">
             <div className="text-sm font-semibold mb-4" style={{ color: "var(--color-text-primary)" }}>Create New Test</div>
             <div className="space-y-4">
-              {[
-                { label: "Test Code", placeholder: "e.g. CS301-END" },
-                { label: "Test Title", placeholder: "e.g. Data Structures End-Semester" },
-                { label: "Course Code", placeholder: "e.g. CS-301" },
-              ].map((f) => (
-                <div key={f.label}>
-                  <label className="block text-[10px] font-semibold uppercase tracking-wider mb-1.5" style={{ color: "var(--color-text-muted)" }}>{f.label}</label>
-                  <input placeholder={f.placeholder} className="w-full rounded px-3 py-2 text-sm outline-none"
-                    style={{ background: "var(--color-bg-elevated)", border: "1px solid var(--color-border)", color: "var(--color-text-primary)", fontFamily: "var(--font-sans)" }}
-                    onFocus={(e) => (e.target.style.borderColor = "#7c3aed")} onBlur={(e) => (e.target.style.borderColor = "var(--color-border)")} />
-                </div>
-              ))}
+              <div>
+                <label htmlFor="test-code" className="block text-[10px] font-semibold uppercase tracking-wider mb-1.5" style={{ color: "var(--color-text-muted)" }}>Test Code</label>
+                <input id="test-code" name="code" required minLength={3} maxLength={24} pattern="[A-Za-z0-9][A-Za-z0-9_-]{2,23}" title="Use 3–24 letters, numbers, hyphens, or underscores." placeholder="e.g. CS2305-MID2" className="w-full rounded px-3 py-2 text-sm outline-none" style={{ background: "var(--color-bg-elevated)", border: "1px solid var(--color-border)", color: "var(--color-text-primary)" }} />
+              </div>
+              <div>
+                <label htmlFor="test-title" className="block text-[10px] font-semibold uppercase tracking-wider mb-1.5" style={{ color: "var(--color-text-muted)" }}>Test Title</label>
+                <input id="test-title" name="title" required minLength={3} maxLength={120} placeholder="e.g. Data Structures Mid-Semester" className="w-full rounded px-3 py-2 text-sm outline-none" style={{ background: "var(--color-bg-elevated)", border: "1px solid var(--color-border)", color: "var(--color-text-primary)" }} />
+              </div>
+              <div>
+                <label htmlFor="test-course" className="block text-[10px] font-semibold uppercase tracking-wider mb-1.5" style={{ color: "var(--color-text-muted)" }}>Course</label>
+                <select id="test-course" name="courseCode" required defaultValue="" className="w-full rounded px-3 py-2 text-sm outline-none" style={{ background: "var(--color-bg-elevated)", border: "1px solid var(--color-border)", color: "var(--color-text-primary)" }}>
+                  <option value="" disabled>Select a VIT Computer Engineering course</option>
+                  {ADMIN_COURSES.filter((course) => course.status === "active").map((course) => <option key={course.code} value={course.code}>{course.code} · {course.title}</option>)}
+                </select>
+              </div>
               <div className="grid grid-cols-2 gap-3">
-                {[{ label: "Date", placeholder: "Oct 15, 2024" }, { label: "Time", placeholder: "10:00 AM" }, { label: "Duration", placeholder: "90 min" }, { label: "Questions", placeholder: "50" }].map((f) => (
-                  <div key={f.label}>
-                    <label className="block text-[10px] font-semibold uppercase tracking-wider mb-1.5" style={{ color: "var(--color-text-muted)" }}>{f.label}</label>
-                    <input placeholder={f.placeholder} className="w-full rounded px-3 py-2 text-sm outline-none"
-                      style={{ background: "var(--color-bg-elevated)", border: "1px solid var(--color-border)", color: "var(--color-text-primary)", fontFamily: "var(--font-sans)" }}
-                      onFocus={(e) => (e.target.style.borderColor = "#7c3aed")} onBlur={(e) => (e.target.style.borderColor = "var(--color-border)")} />
-                  </div>
-                ))}
+                <div><label htmlFor="test-date" className="block text-[10px] font-semibold uppercase tracking-wider mb-1.5" style={{ color: "var(--color-text-muted)" }}>Date</label><input id="test-date" name="date" type="date" required min={new Date(Date.now() - new Date().getTimezoneOffset() * 60_000).toISOString().slice(0, 10)} className="w-full rounded px-3 py-2 text-sm outline-none" style={{ colorScheme: "light", background: "var(--color-bg-elevated)", border: "1px solid var(--color-border)", color: "var(--color-text-primary)" }} /></div>
+                <div><label htmlFor="test-time" className="block text-[10px] font-semibold uppercase tracking-wider mb-1.5" style={{ color: "var(--color-text-muted)" }}>Start Time</label><input id="test-time" name="time" type="time" required className="w-full rounded px-3 py-2 text-sm outline-none" style={{ colorScheme: "light", background: "var(--color-bg-elevated)", border: "1px solid var(--color-border)", color: "var(--color-text-primary)" }} /></div>
+                <div><label htmlFor="test-duration" className="block text-[10px] font-semibold uppercase tracking-wider mb-1.5" style={{ color: "var(--color-text-muted)" }}>Duration (minutes)</label><input id="test-duration" name="duration" type="number" required min={1} max={300} step={1} placeholder="90" className="w-full rounded px-3 py-2 text-sm outline-none" style={{ background: "var(--color-bg-elevated)", border: "1px solid var(--color-border)", color: "var(--color-text-primary)" }} /></div>
+                <div><label htmlFor="test-questions" className="block text-[10px] font-semibold uppercase tracking-wider mb-1.5" style={{ color: "var(--color-text-muted)" }}>Questions</label><input id="test-questions" name="questions" type="number" required min={1} max={200} step={1} placeholder="30" className="w-full rounded px-3 py-2 text-sm outline-none" style={{ background: "var(--color-bg-elevated)", border: "1px solid var(--color-border)", color: "var(--color-text-primary)" }} /></div>
               </div>
               <div>
                 <label className="block text-[10px] font-semibold uppercase tracking-wider mb-1.5" style={{ color: "var(--color-text-muted)" }}>Exam Type</label>
-                <select className="w-full rounded px-3 py-2 text-sm outline-none" style={{ background: "var(--color-bg-elevated)", border: "1px solid var(--color-border)", color: "var(--color-text-primary)", fontFamily: "var(--font-sans)" }}>
+                <select name="type" className="w-full rounded px-3 py-2 text-sm outline-none" style={{ background: "var(--color-bg-elevated)", border: "1px solid var(--color-border)", color: "var(--color-text-primary)", fontFamily: "var(--font-sans)" }}>
                   <option>Mid-Semester</option>
                   <option>Unit Test</option>
                   <option>Quiz</option>
@@ -253,10 +284,10 @@ export default function AdminTestsPage() {
               Test will be saved as Draft. Activate it when ready for students.
             </div>
             <div className="flex gap-2 mt-4">
-              <button onClick={() => setShowCreate(false)} className="flex-1 text-sm rounded py-2" style={{ border: "1px solid var(--color-border)", color: "var(--color-text-secondary)", background: "transparent" }}>Cancel</button>
-              <button onClick={() => { setShowCreate(false); showToast("Test created and saved as Draft."); }} className="flex-1 text-sm font-medium rounded py-2" style={{ background: "#7c3aed", color: "white" }}>Create Draft</button>
+              <button type="button" onClick={() => setShowCreate(false)} className="flex-1 text-sm rounded py-2" style={{ border: "1px solid var(--color-border)", color: "var(--color-text-secondary)", background: "transparent" }}>Cancel</button>
+              <button type="submit" className="flex-1 text-sm font-medium rounded py-2" style={{ background: "#7c3aed", color: "white" }}>Create Draft</button>
             </div>
-          </div>
+          </form>
         </Modal>
       )}
 

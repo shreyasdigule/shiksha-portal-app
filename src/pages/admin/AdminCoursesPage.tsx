@@ -1,6 +1,6 @@
 import { useState } from "react";
-import { ADMIN_COURSES } from "../../data/admin";
-import type { AdminCourse } from "../../data/admin";
+import { ADMIN_COURSES } from "../../data/adminPortalData";
+import type { AdminCourse } from "../../data/adminPortalData";
 
 type StatusFilter = "All" | "active" | "archived" | "draft";
 const DEPT_OPTIONS = ["All", "CSE", "Math", "ECE"];
@@ -15,6 +15,8 @@ export default function AdminCoursesPage() {
   const [courses, setCourses] = useState<AdminCourse[]>(ADMIN_COURSES);
   const [confirmArchive, setConfirmArchive] = useState<AdminCourse | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const [courseError, setCourseError] = useState("");
+  const [newCourse, setNewCourse] = useState({ code: "", title: "", instructor: "", credits: "", capacity: "", dept: "", semester: "" });
 
   const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(null), 3000); };
 
@@ -32,6 +34,28 @@ export default function AdminCoursesPage() {
     setConfirmArchive(null);
   };
 
+  const handleCreateCourse = () => {
+    const code = newCourse.code.trim().toUpperCase();
+    const title = newCourse.title.trim();
+    const dept = newCourse.dept.trim();
+    const credits = Number(newCourse.credits);
+    const capacity = Number(newCourse.capacity);
+    const semester = Number(newCourse.semester);
+    if (!/^[A-Z0-9][A-Z0-9_-]{1,19}$/.test(code)) return setCourseError("Code must be 2–20 letters/numbers (hyphens or underscores allowed)." );
+    if (courses.some((course) => course.code.toUpperCase() === code)) return setCourseError("A course with this code already exists.");
+    if (title.length < 2 || title.length > 120) return setCourseError("Title must be between 2 and 120 characters.");
+    if (dept.length < 2 || dept.length > 100) return setCourseError("Department must be between 2 and 100 characters.");
+    if (!Number.isInteger(credits) || credits < 1 || credits > 8) return setCourseError("Credits must be a whole number from 1 to 8.");
+    if (!Number.isInteger(capacity) || capacity < 1 || capacity > 10000) return setCourseError("Capacity must be a whole number from 1 to 10,000.");
+    if (!Number.isInteger(semester) || semester < 1 || semester > 12) return setCourseError("Semester must be a whole number from 1 to 12.");
+    if (newCourse.instructor.trim().length < 2 || newCourse.instructor.trim().length > 100) return setCourseError("Enter an instructor name (2–100 characters).");
+    const course: AdminCourse = { id: Date.now(), code, title, dept, credits, instructor: newCourse.instructor.trim(), capacity, enrolled: 0, status: "draft", semester: `Semester ${semester}` };
+    setCourses((list) => [...list, course]);
+    setShowAdd(false);
+    setCourseError("");
+    showToast("Course passed validation and was added to this demo session.");
+  };
+
   return (
     <div className="p-6 max-w-[1080px]">
       {toast && (
@@ -45,7 +69,7 @@ export default function AdminCoursesPage() {
           <h1 className="text-xl font-semibold mb-1" style={{ color: "var(--color-text-primary)" }}>Course Management</h1>
           <p className="text-sm" style={{ color: "var(--color-text-muted)" }}>{filtered.length} of {courses.length} courses shown</p>
         </div>
-        <button onClick={() => setShowAdd(true)} className="flex items-center gap-2 text-sm font-medium rounded px-4 py-2" style={{ background: "#7c3aed", color: "white" }}>
+        <button onClick={() => { setCourseError(""); setNewCourse({ code: "", title: "", instructor: "", credits: "", capacity: "", dept: "", semester: "" }); setShowAdd(true); }} className="flex items-center gap-2 text-sm font-medium rounded px-4 py-2" style={{ background: "#7c3aed", color: "white" }}>
           <PlusIcon /> Add Course
         </button>
       </div>
@@ -191,30 +215,41 @@ export default function AdminCoursesPage() {
           <div className="p-6 max-w-[440px] w-[440px]">
             <div className="text-sm font-semibold mb-4" style={{ color: "var(--color-text-primary)" }}>Add New Course</div>
             <div className="space-y-4">
-              {[{ label: "Course Code", placeholder: "e.g. CS-401" }, { label: "Course Title", placeholder: "e.g. Machine Learning" }, { label: "Instructor", placeholder: "Dr. Name" }].map((f) => (
-                <div key={f.label}>
+              {([
+                { key: "code", label: "Subject Code", placeholder: "e.g. CS-401", maxLength: 20 },
+                { key: "title", label: "Subject Name", placeholder: "e.g. Machine Learning", maxLength: 120 },
+                { key: "instructor", label: "Instructor", placeholder: "Dr. Name", maxLength: 100 },
+                { key: "dept", label: "Department", placeholder: "e.g. CSE", maxLength: 100 },
+              ] as const).map((f) => (
+                <div key={f.key}>
                   <label className="block text-[10px] font-semibold uppercase tracking-wider mb-1.5" style={{ color: "var(--color-text-muted)" }}>{f.label}</label>
-                  <input placeholder={f.placeholder} className="w-full rounded px-3 py-2 text-sm outline-none"
+                  <input required maxLength={f.maxLength} value={newCourse[f.key]} placeholder={f.placeholder} className="w-full rounded px-3 py-2 text-sm outline-none"
                     style={{ background: "var(--color-bg-elevated)", border: "1px solid var(--color-border)", color: "var(--color-text-primary)", fontFamily: "var(--font-sans)" }}
+                    onChange={(e) => setNewCourse((value) => ({ ...value, [f.key]: e.target.value }))}
                     onFocus={(e) => (e.target.style.borderColor = "#7c3aed")} onBlur={(e) => (e.target.style.borderColor = "var(--color-border)")} />
                 </div>
               ))}
               <div className="grid grid-cols-3 gap-3">
-                {[{ label: "Credits", placeholder: "4" }, { label: "Capacity", placeholder: "80" }, { label: "Dept", placeholder: "CSE" }].map((f) => (
-                  <div key={f.label}>
+                {([
+                  { key: "credits", label: "Credits", min: 1, max: 8 },
+                  { key: "capacity", label: "Capacity", min: 1, max: 10000 },
+                  { key: "semester", label: "Semester", min: 1, max: 12 },
+                ] as const).map((f) => (
+                  <div key={f.key}>
                     <label className="block text-[10px] font-semibold uppercase tracking-wider mb-1.5" style={{ color: "var(--color-text-muted)" }}>{f.label}</label>
-                    <input placeholder={f.placeholder} className="w-full rounded px-3 py-2 text-sm outline-none"
+                    <input required type="number" min={f.min} max={f.max} step={1} value={newCourse[f.key]} className="w-full rounded px-3 py-2 text-sm outline-none"
                       style={{ background: "var(--color-bg-elevated)", border: "1px solid var(--color-border)", color: "var(--color-text-primary)", fontFamily: "var(--font-sans)" }}
-                      onFocus={(e) => (e.target.style.borderColor = "#7c3aed")} onBlur={(e) => (e.target.style.borderColor = "var(--color-border)")} />
+                      onChange={(e) => setNewCourse((value) => ({ ...value, [f.key]: e.target.value }))} />
                   </div>
                 ))}
               </div>
+              {courseError && <p role="alert" className="text-xs" style={{ color: "var(--color-danger)" }}>{courseError}</p>}
             </div>
             <div className="flex gap-2 mt-5">
               <button onClick={() => setShowAdd(false)} className="flex-1 text-sm rounded py-2" style={{ border: "1px solid var(--color-border)", color: "var(--color-text-secondary)", background: "transparent" }}>
                 Cancel
               </button>
-              <button onClick={() => { setShowAdd(false); showToast("Course created successfully."); }} className="flex-1 text-sm font-medium rounded py-2" style={{ background: "#7c3aed", color: "white" }}>
+              <button onClick={handleCreateCourse} className="flex-1 text-sm font-medium rounded py-2" style={{ background: "#7c3aed", color: "white" }}>
                 Create Course
               </button>
             </div>
