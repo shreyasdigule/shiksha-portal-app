@@ -6,41 +6,61 @@ The frontend is built with React 19, TypeScript, Vite, and Tailwind CSS 4. Supab
 
 ## Run locally
 
-### Prerequisites
+You need Git, Node.js 22 or newer, and pnpm 10 or newer. Run each step in a terminal.
 
-- Node.js 22 or newer
-- [pnpm](https://pnpm.io/installation) 10 or newer (the project includes `pnpm-lock.yaml`)
-- A [Supabase](https://supabase.com/) project for sign-in, registration, and cloud-backed features
-
-### 1. Get the source and install dependencies
+### 1. Download the project
 
 ```sh
 git clone https://github.com/shreyasdigule/shiksha-portal-app.git
 cd shiksha-portal-app
+```
+
+If you already have the project folder, open a terminal in that folder and skip this step.
+
+### 2. Install dependencies
+
+```sh
 corepack enable
 pnpm install
 ```
 
-In Windows PowerShell, the same commands work. If `corepack enable` is blocked by permissions, install pnpm 10 using the instructions on the pnpm website.
+If `corepack enable` is blocked by permissions, install pnpm using the [pnpm installation instructions](https://pnpm.io/installation).
 
-### 2. Configure Supabase
+### 3. Configure the existing Supabase project
 
-Create a Supabase project. Copy the project URL and **publishable** key from its API settings, then create your local environment file:
+The app already uses the shared [ShikshaPortal Supabase project](https://supabase.com/dashboard/project/wuziytmlyzjkcsqbrodg). You do not need to create a project or run migrations. Create a local environment file:
 
-```sh
-cp .env.example .env.local
+```powershell
+Copy-Item .env.example .env.local
 ```
 
-On Windows PowerShell, use `Copy-Item .env.example .env.local` instead. Edit `.env.local` and set:
+On macOS/Linux, use `cp .env.example .env.local`. Open `.env.local` and set the project URL and its **publishable** key:
 
 ```dotenv
-VITE_SUPABASE_URL=https://YOUR_PROJECT_REF.supabase.co
-VITE_SUPABASE_PUBLISHABLE_KEY=sb_publishable_YOUR_PUBLIC_KEY
+VITE_SUPABASE_URL=https://wuziytmlyzjkcsqbrodg.supabase.co
+VITE_SUPABASE_PUBLISHABLE_KEY=<publishable-key>
 ```
 
-### 3. Create the database schema
+Get the publishable key from a project owner or the Supabase project's API settings. Keep `.env.local` private; never commit a Supabase secret or service-role key.
 
-In the Supabase dashboard, open **SQL Editor** and run the files in `supabase/migrations` in this order:
+### 4. Start the app
+
+```sh
+pnpm dev
+```
+
+Open the local URL printed in the terminal, usually `http://localhost:5173`. Press `Ctrl+C` in the terminal to stop the server.
+
+To create and preview a production build, run:
+
+```sh
+pnpm build
+pnpm preview
+```
+
+## Using a separate Supabase project
+
+Only follow this section when setting up a separate project for a fork or isolated environment. Create the project, set its URL and publishable key in `.env.local`, then run these files in order in the Supabase **SQL Editor**:
 
 1. `202609300001_initial_portal.sql`
 2. `202609300002_faculty_accounts.sql`
@@ -51,20 +71,7 @@ In the Supabase dashboard, open **SQL Editor** and run the files in `supabase/mi
 
 Migration 0005 repairs the Auth trigger and faculty table if earlier faculty migrations were only partly applied. Migration 0006 seeds the AY 2025-26 VIT Pune Computer Engineering subjects used by attendance and test scheduling.
 
-For this classroom demo, turn **Confirm email** off under **Authentication → Sign In / Providers → Email** so registration can sign in immediately. Configure the site URL and local/deployed redirect URLs in Supabase Auth settings. Password-reset emails require an email provider.
-
-### 4. Start the development server
-
-```sh
-pnpm dev
-```
-
-Open the local URL printed by Vite (usually `http://localhost:5173`). To create a production build or serve that build locally:
-
-```sh
-pnpm build
-pnpm preview
-```
+For this classroom demo, turn **Confirm email** off under **Authentication → Sign In / Providers → Email** so registration can sign in immediately, and configure the site URL and local/deployed redirect URLs. Password-reset emails require an email provider.
 
 ## What the app includes
 
