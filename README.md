@@ -1,105 +1,53 @@
 # ShikshaPortal
 
-ShikshaPortal is a student registration and assessment portal for students and faculty. Students can register and sign in, view a dashboard, courses, tests, results, attendance, and their profile. Faculty/admin pages provide a student directory and attendance management. Authentication and selected student/faculty records are backed by Supabase; several course, test, and exam workflows are still demo-only (see [Current scope](#current-scope)).
+ShikshaPortal is a student registration and academic portal for students and faculty at Vishwakarma Institute of Technology, Pune.
 
-The frontend is built with React 19, TypeScript, Vite, and Tailwind CSS 4. Supabase provides authentication and cloud data. The old Express/MongoDB backend is no longer part of this project.
+## Open the live portal
 
-## Run locally
+**[Launch ShikshaPortal](https://shiksha-portal-app.onrender.com/)**
 
-You need Git, Node.js 22 or newer, and pnpm 10 or newer. Run each step in a terminal.
+The site is hosted on Render's free plan. After a period of inactivity, the first visit may take around a minute while the service wakes up.
 
-### 1. Download the project
+### Getting started
 
-```sh
-git clone https://github.com/shreyasdigule/shiksha-portal-app.git
-cd shiksha-portal-app
-```
+- **Students:** Choose **Student** to sign in, or **Create account** to register with your VIT email and PRN, full name, department, semester, and a password.
+- **Faculty:** Choose **Faculty / Admin** to sign in or register a faculty account with a VIT email, full name, department, and a password.
+- **Password reset:** Choose the appropriate role, enter the account's VIT email, then select **Forgot password?**. A reset email is sent only if the account exists and Supabase email delivery is configured.
+- **Theme:** Use the control in the upper-right corner to switch between light and dark modes.
 
-If you already have the project folder, open a terminal in that folder and skip this step.
+Use your own account. Do not enter another person's credentials or sensitive information.
 
-### 2. Install dependencies
+## What works with Supabase
 
-```sh
-corepack enable
-pnpm install
-```
+The live site uses Supabase Auth and the connected ShikshaPortal database for:
 
-If `corepack enable` is blocked by permissions, install pnpm using the [pnpm installation instructions](https://pnpm.io/installation).
+- Student and faculty registration and sign-in.
+- Student/faculty profiles and faculty account status checks.
+- The faculty student directory.
+- Faculty attendance records.
+- The eight active Computer Engineering subjects used by faculty attendance.
 
-### 3. Configure the existing Supabase project
+The app also includes demo workflows for courses, tests, exams, results, and student attendance. These workflows are not fully persisted to Supabase. Do not treat demo scores, enrollment counts, or attendance views as official records.
 
-The app already uses the shared [ShikshaPortal Supabase project](https://supabase.com/dashboard/project/wuziytmlyzjkcsqbrodg). You do not need to create a project or run migrations. Create a local environment file:
+## For maintainers
 
-```powershell
-Copy-Item .env.example .env.local
-```
+The frontend uses React 19, TypeScript, Vite, and Tailwind CSS 4. Render builds the Docker image from the repository's root [Dockerfile](./Dockerfile); [nginx.conf](./nginx.conf) serves the production build and routes client-side URLs to the app. The [Render Blueprint](./render.yaml) describes the web service.
 
-On macOS/Linux, use `cp .env.example .env.local`. Open `.env.local` and set the project URL and its **publishable** key:
+### Supabase configuration
 
-```dotenv
-VITE_SUPABASE_URL=https://wuziytmlyzjkcsqbrodg.supabase.co
-VITE_SUPABASE_PUBLISHABLE_KEY=<publishable-key>
-```
+The current deployment uses the shared [ShikshaPortal Supabase project](https://supabase.com/dashboard/project/wuziytmlyzjkcsqbrodg). Its project URL and **publishable** key are build-time environment variables in Render:
 
-Get the publishable key from a project owner or the Supabase project's API settings. Keep `.env.local` private; never commit a Supabase secret or service-role key.
+- `VITE_SUPABASE_URL`
+- `VITE_SUPABASE_PUBLISHABLE_KEY`
 
-### 4. Start the app
+These values are included in the browser bundle and are not secrets. Never use a Supabase secret or service-role key in a `VITE_` variable or client-side code. Keep local `.env.local` files out of Git.
 
-```sh
-pnpm dev
-```
+For a new Supabase project, apply the migrations in `supabase/migrations/` in filename order, configure the two variables above, and add the deployed URL to Supabase's allowed redirect URLs. To support immediate demo registration, email confirmation must be disabled; use that setting only for a classroom demo. Password reset requires configured email delivery.
 
-Open the local URL printed in the terminal, usually `http://localhost:5173`. Press `Ctrl+C` in the terminal to stop the server.
+### Deploying updates
 
-To create and preview a production build, run:
+The Render service is available at [shiksha-portal-app.onrender.com](https://shiksha-portal-app.onrender.com/). If Render is connected to the GitHub repository, pushes to `main` deploy automatically. Otherwise, sync the Blueprint or trigger a deploy from the Render service dashboard.
 
-```sh
-pnpm build
-pnpm preview
-```
+### Production limitations
 
-## Deploy on Render
-
-The repository includes a Docker image definition and Render Blueprint for deploying the production frontend as a single web service.
-
-1. Push the project to GitHub and connect the repository in the [Render Dashboard](https://dashboard.render.com/).
-2. Choose **New → Blueprint**, select the repository, and apply the `render.yaml` Blueprint.
-3. When prompted, set `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY` to your Supabase project URL and **publishable** key. These values are embedded in the browser build; never use a Supabase secret or service-role key.
-4. Deploy the service. Render builds the Docker image and provides one public `onrender.com` URL for the app. The free service may take a short time to wake after inactivity.
-
-For a fork or separate Supabase project, apply the migrations described in [Using a separate Supabase project](#using-a-separate-supabase-project) and configure that project's URL and publishable key in Render.
-
-## Using a separate Supabase project
-
-Only follow this section when setting up a separate project for a fork or isolated environment. Create the project, set its URL and publishable key in `.env.local`, then run these files in order in the Supabase **SQL Editor**:
-
-1. `202609300001_initial_portal.sql`
-2. `202609300002_faculty_accounts.sql`
-3. `202609300003_faculty_self_registration.sql`
-4. `202609300004_faculty_immediate_activation.sql`
-5. `202609300005_fix_faculty_signup.sql`
-6. `202609300006_computer_engineering_subjects.sql`
-
-Migration 0005 repairs the Auth trigger and faculty table if earlier faculty migrations were only partly applied. Migration 0006 seeds the AY 2025-26 VIT Pune Computer Engineering subjects used by attendance and test scheduling.
-
-For this classroom demo, turn **Confirm email** off under **Authentication → Sign In / Providers → Email** so registration can sign in immediately, and configure the site URL and local/deployed redirect URLs. Password-reset emails require an email provider.
-
-## What the app includes
-
-- Student registration and sign-in, session restoration, and password reset through Supabase Auth. Roles come from the database profile; choosing a role in the login form does not grant access.
-- Faculty self-registration and sign-in, plus a faculty student directory populated from registered profiles.
-- Faculty attendance entry backed by Supabase and the seeded Computer Engineering subjects.
-- Student dashboard, course and test pages, exam interface, result review, attendance, and profile pages.
-- Admin dashboard pages for students, courses, tests, results, attendance, and settings.
-
-## Current scope
-
-Supabase currently backs authentication, student/faculty profiles, the faculty directory, and faculty attendance. The schema also defines subjects, enrollments, tests, questions, attempts, and answers, but student course/test lists, faculty course/test management, exam attempts and scoring, student results, and the student attendance view still use local demo data. Faculty-created tests do not persist after reload. Profile/contact display preferences and theme settings are stored in the browser.
-
-The demo exam bank includes answer keys in client-side code. Do not use demo scores, enrollment counts, or security warnings as official records. Before using exams with real students, move test availability, attempt limits, and scoring into trusted server-side/database functions and keep answer keys off the client.
-
-## Security notes
-
-The browser app must use only the Supabase publishable key. Never put a Supabase secret or service-role key in a `VITE_` variable or browser code. Database access is protected with Row Level Security policies defined by the migrations.
-
-Disabling email confirmation is only suitable for this demonstration: the app cannot verify that someone owns the VIT email address they enter. Admin accounts are provisioned by the project owner and cannot be created through public signup.
+The demo exam bank contains answer keys in client-side code. Before using exams with real students, move exam availability, attempt limits, and scoring into trusted server-side/database functions and keep answer keys off the client. Review the Supabase Row Level Security policies in the SQL migrations before changing database access.
