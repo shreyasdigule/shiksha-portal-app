@@ -58,6 +58,17 @@ pnpm build
 pnpm preview
 ```
 
+## Deploy on Render
+
+The repository includes a Docker image definition and Render Blueprint for deploying the production frontend as a single web service.
+
+1. Push the project to GitHub and connect the repository in the [Render Dashboard](https://dashboard.render.com/).
+2. Choose **New → Blueprint**, select the repository, and apply the `render.yaml` Blueprint.
+3. When prompted, set `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY` to your Supabase project URL and **publishable** key. These values are embedded in the browser build; never use a Supabase secret or service-role key.
+4. Deploy the service. Render builds the Docker image and provides one public `onrender.com` URL for the app. The free service may take a short time to wake after inactivity.
+
+For a fork or separate Supabase project, apply the migrations described in [Using a separate Supabase project](#using-a-separate-supabase-project) and configure that project's URL and publishable key in Render.
+
 ## Using a separate Supabase project
 
 Only follow this section when setting up a separate project for a fork or isolated environment. Create the project, set its URL and publishable key in `.env.local`, then run these files in order in the Supabase **SQL Editor**:
